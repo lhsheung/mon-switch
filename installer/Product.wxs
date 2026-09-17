@@ -1,0 +1,185 @@
+<?ifndef InstallScope ?>
+  <?define InstallScope = "perUser" ?>
+<?endif ?>
+
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui"
+     xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
+
+  <!--
+    Two flavours are produced from this one source file:
+      perUser     - installs under %LocalAppData%\Programs, never asks for administrator rights
+      perMachine  - installs under Program Files, needs elevation, shared by every account
+    They carry different UpgradeCodes on purpose: two MSI packages that share one UpgradeCode
+    and differ only in scope will fight each other during a major upgrade.
+  -->
+  <?if $(var.InstallScope) = "perMachine" ?>
+    <?define ProductUpgradeCode = "8D5F2B73-1C46-4A98-B0E3-7F1D9A2C5B84" ?>
+    <?define KeyPathRoot = "HKLM" ?>
+  <?else ?>
+    <?define ProductUpgradeCode = "7C4E1A62-9B3D-4F58-A1E7-2D6B8C0F4E91" ?>
+    <?define KeyPathRoot = "HKCU" ?>
+  <?endif ?>
+
+  <Package Name="mon-switch"
+           Manufacturer="lhsheung"
+           Version="1.0.0"
+           UpgradeCode="$(var.ProductUpgradeCode)"
+           Scope="$(var.InstallScope)">
+
+    <SummaryInformation Description="mon-switch - system-tray Windows display / projection mode switcher" />
+    <MajorUpgrade DowngradeErrorMessage="A newer version of mon-switch is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <Icon Id="AppIcon" SourceFile="..\src\mon-switch\Resources\app.ico" />
+    <Property Id="ARPPRODUCTICON" Value="AppIcon" />
+    <Property Id="ARPCOMMENTS" Value="Switch the Windows display / projection mode from the notification area, with global hotkeys and four interface languages." />
+
+    <!--
+      Two things were tried here and deliberately NOT kept:
+
+      - An explicit <Property Id="ALLUSERS" /> to force per-user registration. It does not move
+        the Add/Remove Programs entry to HKCU (see below), and it breaks the per-machine build
+        with WIX0091 "Duplicate symbol 'Property:ALLUSERS'", because Scope="perMachine" already
+        emits ALLUSERS=1.
+      - ARPINSTALLLOCATION. MSI does not expand a property reference there, so it surfaces in
+        Settings as the literal text "[INSTALLFOLDER]" instead of a path.
+
+      On the test machine the Add/Remove Programs entry lands in HKLM even though the package is
+      per-user, while the files, the Start Menu shortcut and the uninstall all behave correctly
+      as per-user. That placement is Windows Installer's own decision, not a packaging mistake.
+    -->
+
+    <!--
+      The framework-dependent payload needs the .NET 8 Desktop Runtime, so the installer
+      refuses to run without it rather than leaving the user with a program that will not
+      start.
+
+      Detection is deliberately indirect, because the obvious key is unusable: under
+      SOFTWARE\dotnet\Setup\InstalledVersions\x64\sharedfx\Microsoft.WindowsDesktop.App the
+      VALUE NAME is the version number itself ("8.0.7" = 1), so there is no fixed name to
+      search for. Two stable anchors are used instead:
+
+        1. ...\InstalledVersions\x64\hostfxr has a fixed value name "Version".
+        2. the WindowsDesktop.App folder under %ProgramFiles%\dotnet\shared, which proves a
+           DESKTOP runtime specifically (not just ASP.NET Core) is present.
+
+      Both live under the 32-bit registry view on this machine, hence Bitness="always32".
+    -->
+    <Property Id="DOTNETHOSTFXRVERSION">
+      <RegistrySearch Id="RS_HostFxr"
+                      Root="HKLM"
+                      Key="SOFTWARE\dotnet\Setup\InstalledVersions\x64\hostfxr"
+                      Name="Version"
+                      Type="raw"
+                      Bitness="always32" />
+    </Property>
+
+    <Property Id="DESKTOPRUNTIMEFOLDER">
+      <DirectorySearch Id="DS_DesktopRuntime"
+                       Path="[ProgramFiles64Folder]dotnet\shared\Microsoft.WindowsDesktop.App"
+                       Depth="0" />
+    </Property>
+
+    <Launch Condition="Installed OR (DOTNETHOSTFXRVERSION AND DESKTOPRUNTIMEFOLDER)"
+            Message="mon-switch needs the .NET 8 Desktop Runtime, which was not found on this machine.&#13;&#10;&#13;&#10;Download it from https://dotnet.microsoft.com/download/dotnet/8.0 (choose the Desktop Runtime, x64), then run this installer again." />
+
+    <!-- A tray utility must not survive an upgrade: the files would stay locked. -->
+    <util:CloseApplication Id="CloseMonSwitch"
+                           Target="mon-switch.exe"
+                           CloseMessage="no"
+                           PromptToContinue="no"
+                           RebootPrompt="no" />
+
+    <?if $(var.InstallScope) = "perMachine" ?>
+      <StandardDirectory Id="ProgramFiles6432Folder">
+        <Directory Id="INSTALLFOLDER" Name="mon-switch" />
+      </StandardDirectory>
+    <?else ?>
+      <StandardDirectory Id="LocalAppDataFolder">
+        <Directory Id="ProgramsFolder" Name="Programs">
+          <Directory Id="INSTALLFOLDER" Name="mon-switch" />
+        </Directory>
+      </StandardDirectory>
+    <?endif ?>
+
+    <Component Id="C_App" Directory="INSTALLFOLDER" Guid="A3F5C8D1-6B24-4E79-9C0A-1D7E5B3A8F42">
+      <File Id="F_Exe" Source="..\artifacts\framework-dependent\mon-switch.exe" />
+      <File Id="F_Dll" Source="..\artifacts\framework-dependent\mon-switch.dll" />
+      <File Id="F_Deps" Source="..\artifacts\framework-dependent\mon-switch.deps.json" />
+      <File Id="F_RuntimeConfig" Source="..\artifacts\framework-dependent\mon-switch.runtimeconfig.json" />
+      <RegistryValue Root="$(var.KeyPathRoot)" Key="Software\mon-switch" Name="installed" Type="integer" Value="1" KeyPath="yes" />
+    </Component>
+
+    <!--
+      Shortcuts live in the Start Menu, which Windows Installer always treats as part of the
+      user profile (ICE38 / ICE43 / ICE57), so these two components keep an HKCU KeyPath in
+      both flavours - not HKLM even for the per-machine package.
+    -->
+    <Component Id="C_StartMenuShortcut" Directory="ProgramMenuFolder" Guid="D9F4A1B6-5C37-6EA8-A04D-7B1C3E9F5A82">
+      <Shortcut Id="SC_StartMenu"
+                Name="mon-switch"
+                Description="Switch the Windows display / projection mode"
+                Target="[INSTALLFOLDER]mon-switch.exe"
+                WorkingDirectory="INSTALLFOLDER"
+                Icon="AppIcon" />
+      <RegistryValue Root="HKCU" Key="Software\mon-switch" Name="startMenu" Type="integer" Value="1" KeyPath="yes" />
+    </Component>
+
+    <Component Id="C_UninstallShortcut" Directory="ProgramMenuFolder" Guid="EA05B2C7-6D48-7FB9-B15E-8C2D4F0A6B93">
+      <Shortcut Id="SC_Uninstall"
+                Name="Uninstall mon-switch"
+                Description="Remove mon-switch from this computer"
+                Target="[System64Folder]msiexec.exe"
+                Arguments="/x [ProductCode]" />
+      <RegistryValue Root="HKCU" Key="Software\mon-switch" Name="uninstallShortcut" Type="integer" Value="1" KeyPath="yes" />
+    </Component>
+
+    <?if $(var.InstallScope) = "perMachine" ?>
+      <!-- Nothing to clean up: Program Files is not under a user profile. -->
+    <?else ?>
+      <!--
+        Directories under the user profile must be registered for removal (ICE64).
+        RemoveFolder deletes a directory only when it is empty, so an unrelated
+        "%LocalAppData%\Programs" belonging to other software is left untouched.
+      -->
+      <Component Id="C_InstallFolder" Directory="INSTALLFOLDER" Guid="B7D2E9F4-3A15-4C86-8E2B-5F9A1C7D3E60">
+        <RemoveFolder Id="RF_InstallFolder" On="uninstall" />
+        <RegistryValue Root="HKCU" Key="Software\mon-switch" Name="installFolder" Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+
+      <Component Id="C_ProgramsFolder" Directory="ProgramsFolder" Guid="C8E3F0A5-4B26-5D97-9F3C-6A0B2D8E4F71">
+        <RemoveFolder Id="RF_ProgramsFolder" On="uninstall" />
+        <RegistryValue Root="HKCU" Key="Software\mon-switch" Name="programsFolder" Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+    <?endif ?>
+
+    <Feature Id="Main" Title="mon-switch" Level="1">
+      <ComponentRef Id="C_App" />
+      <ComponentRef Id="C_StartMenuShortcut" />
+      <ComponentRef Id="C_UninstallShortcut" />
+      <?if $(var.InstallScope) = "perUser" ?>
+        <ComponentRef Id="C_InstallFolder" />
+        <ComponentRef Id="C_ProgramsFolder" />
+      <?endif ?>
+    </Feature>
+
+    <ui:WixUI Id="WixUI_Minimal" />
+    <WixVariable Id="WixUILicenseRtf" Value="license.rtf" />
+
+    <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOXTEXT" Value="Start mon-switch now" />
+    <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOX" Value="1" />
+
+    <CustomAction Id="LaunchMonSwitch" FileRef="F_Exe" ExeCommand="" Return="asyncNoWait" />
+
+    <UI>
+      <Publish Dialog="ExitDialog"
+               Control="Finish"
+               Order="999"
+               Event="DoAction"
+               Value="LaunchMonSwitch"
+               Condition="WIXUI_EXITDIALOGOPTIONALCHECKBOX = 1 and NOT Installed" />
+    </UI>
+
+  </Package>
+</Wix>

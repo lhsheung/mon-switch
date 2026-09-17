@@ -1,0 +1,90 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+
+    <AssemblyName>mon-switch</AssemblyName>
+    <RootNamespace>MonSwitch</RootNamespace>
+    <ApplicationIcon>Resources\app.ico</ApplicationIcon>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+
+    <Product>mon-switch</Product>
+    <AssemblyTitle>mon-switch</AssemblyTitle>
+    <Description>System-tray utility that switches the Windows display / projection mode.</Description>
+    <Company>lhsheung</Company>
+    <Copyright>Copyright © 2026 lhsheung. All rights reserved. Personal, non-commercial use only.</Copyright>
+    <Version>1.0.0</Version>
+    <FileVersion>1.0.0.0</FileVersion>
+    <InformationalVersion>1.0.0</InformationalVersion>
+
+    <!--
+      Footprint tuning. Every switch here is explained in README.md > "後台佔用方案".
+      InvariantGlobalization is safe because language detection uses GetUserDefaultUILanguage()
+      and every user-visible string lives in the JSON language packs, not in satellite assemblies.
+    -->
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
+    <ServerGarbageCollection>false</ServerGarbageCollection>
+    <TieredPGO>true</TieredPGO>
+    <MetadataUpdaterSupport>false</MetadataUpdaterSupport>
+    <EnableUnsafeBinaryFormatterSerialization>false</EnableUnsafeBinaryFormatterSerialization>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Resources\Lang\en.json" LogicalName="MonSwitch.Lang.en.json" />
+    <EmbeddedResource Include="Resources\Lang\zh-Hant.json" LogicalName="MonSwitch.Lang.zh-Hant.json" />
+    <EmbeddedResource Include="Resources\Lang\zh-Hans.json" LogicalName="MonSwitch.Lang.zh-Hans.json" />
+    <EmbeddedResource Include="Resources\Lang\yue.json" LogicalName="MonSwitch.Lang.yue.json" />
+    <EmbeddedResource Include="Resources\app.ico" LogicalName="MonSwitch.app.ico" />
+  </ItemGroup>
+
+  <!--
+    ============================================================================
+    Dropping the unused half of the Windows Desktop shared framework
+    ============================================================================
+    Microsoft.WindowsDesktop.App is ONE runtime pack that ships Windows Forms and
+    WPF together. A self-contained publish therefore copies both, whether or not
+    the project uses WPF. mon-switch never references WPF, so ~39 MB of it is dead
+    weight. Measured on .NET 8.0.425 / win-x64: 38.71 MB out of a 144.64 MB
+    self-contained output.
+
+    These files are removed from the publish item set, which means the removal
+    also applies inside a single-file bundle.
+
+    Risk: if mon-switch ever gains a WPF dependency, that dependency will be
+    missing at run time. The app was re-verified after the removal (tray icon,
+    global hotkey registration, display-mode query, settings window, language check).
+    Safety valve: build with -p:DropUnusedWpfAssemblies=false to publish the
+    untouched runtime.
+  -->
+  <PropertyGroup>
+    <DropUnusedWpfAssemblies Condition="'$(DropUnusedWpfAssemblies)' == ''">true</DropUnusedWpfAssemblies>
+  </PropertyGroup>
+
+  <Target Name="MonSwitchDropUnusedWpfAssemblies"
+          AfterTargets="ComputeResolvedFilesToPublishList"
+          Condition="'$(DropUnusedWpfAssemblies)' == 'true' and '$(SelfContained)' == 'true'">
+    <PropertyGroup>
+      <!-- Semicolon surrounded so that each lookup is an exact full-name match. -->
+      <_MonSwitchWpfList>;PresentationFramework.dll;PresentationCore.dll;PresentationFramework-SystemCore.dll;PresentationFramework-SystemData.dll;PresentationFramework-SystemDrawing.dll;PresentationFramework-SystemXml.dll;PresentationFramework-SystemXmlLinq.dll;PresentationFramework.Aero.dll;PresentationFramework.Aero2.dll;PresentationFramework.Classic.dll;PresentationFramework.Luna.dll;PresentationFramework.Royale.dll;System.Xaml.dll;ReachFramework.dll;System.Printing.dll;System.Windows.Controls.Ribbon.dll;System.Windows.Input.Manipulations.dll;System.Windows.Presentation.dll;wpfgfx_cor3.dll;PresentationNative_cor3.dll;D3DCompiler_47_cor3.dll;</_MonSwitchWpfList>
+    </PropertyGroup>
+
+    <ItemGroup>
+      <_MonSwitchWpfDropped
+        Include="@(ResolvedFileToPublish)"
+        Condition="$([System.String]::Copy('$(_MonSwitchWpfList)').Contains(';%(Filename)%(Extension);'))" />
+      <ResolvedFileToPublish Remove="@(_MonSwitchWpfDropped)" />
+    </ItemGroup>
+
+    <Message Importance="high"
+             Condition="'@(_MonSwitchWpfDropped)' != ''"
+             Text="mon-switch: dropped @(_MonSwitchWpfDropped->Count()) unused WPF file(s) from the publish set." />
+  </Target>
+
+</Project>

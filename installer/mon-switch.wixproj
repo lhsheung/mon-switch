@@ -1,0 +1,23 @@
+<Project Sdk="WixToolset.Sdk/4.0.5">
+
+  <PropertyGroup>
+    <OutputName>mon-switch-setup</OutputName>
+    <OutputType>Package</OutputType>
+    <Platform>x64</Platform>
+    <InstallerPlatform>x64</InstallerPlatform>
+
+    <!--
+      ICE91 warns that a directory under the user profile does not follow the ALLUSERS
+      value. That is the entire point of the perUser flavour, so the warning is noise.
+    -->
+    <SuppressIces>ICE91</SuppressIces>
+
+    <DefineConstants Condition="'$(DefineConstants)' == ''">InstallScope=perUser</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="WixToolset.UI.wixext" Version="4.0.5" />
+    <PackageReference Include="WixToolset.Util.wixext" Version="4.0.5" />
+  </ItemGroup>
+
+</Project>

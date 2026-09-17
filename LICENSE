@@ -1,0 +1,154 @@
+mon-switch — 专有许可协议 / Proprietary License
+================================================
+
+Copyright © 2026 lhsheung. All rights reserved.
+版权所有，保留一切权利。
+
+https://github.com/lhsheung/mon-switch
+
+本软件为「源码公开」（source-available），但**不是**开源软件（open source）。
+本协议允许个人非商业使用，**明确禁止任何商业用途**。
+
+This software is source-available but is NOT open source. Personal,
+non-commercial use is permitted. **Commercial use is expressly prohibited.**
+
+
+--------------------------------------------------------------------------
+1. 授予的许可 / Grant of License
+--------------------------------------------------------------------------
+
+在完全遵守本协议的前提下，版权持有人授予你一项免费的、非排他的、不可
+转让、不可再许可的许可，允许你：
+
+  (a) 查看、下载与编译本软件的源码；
+  (b) 在**个人非商业目的**下运行本软件；
+  (c) 为非商业目的修改本软件，且仅供你自己使用。
+
+Subject to full compliance with this agreement, the copyright holder grants
+you a free, non-exclusive, non-transferable, non-sublicensable license to:
+
+  (a) view, download and compile the source code of this software;
+  (b) run this software for **personal, non-commercial purposes**;
+  (c) modify this software for non-commercial purposes, for your own use only.
+
+
+--------------------------------------------------------------------------
+2. 禁止商业使用 / Prohibition of Commercial Use
+--------------------------------------------------------------------------
+
+未经版权持有人事先书面许可，你**不得**：
+
+  (a) 将本软件或其任何衍生作品用于任何商业目的，包括但不限于销售、
+      出租、许可、收费服务，或以其为基础提供商业产品或服务；
+  (b) 在商业组织内部部署本软件以支持其经营活动；
+  (c) 以本软件为基础提供任何收费的技术支持、咨询、托管或 SaaS 服务；
+  (d) 将本软件或其衍生作品与本软件一起、或在其他产品中，作为商品
+      出售或捆绑销售。
+
+Without prior written permission from the copyright holder, you **must not**:
+
+  (a) use this software or any derivative work for any commercial purpose,
+      including but not limited to selling, renting, licensing, charging for
+      services, or offering it as part of a commercial product or service;
+  (b) deploy this software within a commercial organisation to support its
+      business operations;
+  (c) offer paid technical support, consulting, hosting or SaaS based on
+      this software;
+  (d) sell or bundle this software or its derivative works as a commodity,
+      whether on its own or within another product.
+
+「商业目的」指任何以营利为目的或由营利性实体进行的使用，包括公司、
+合伙、独资经营及其他商业组织。个人出于学习、研究、业余爱好、个人
+娱乐或非营利组织内部使用的目的，不属于商业使用。
+
+"Commercial purpose" means any use intended for profit or carried out by a
+for-profit entity, including corporations, partnerships, sole
+proprietorships and other commercial organisations. Personal use for study,
+research, hobby projects, personal entertainment, or internal use by
+non-profit organisations does not constitute commercial use.
+
+
+--------------------------------------------------------------------------
+3. 署名与声明保留 / Attribution and Notices
+--------------------------------------------------------------------------
+
+你必须在所有副本及衍生作品中，完整保留本协议全文与上述版权声明，
+不得移除、遮蔽或修改源码文件、文档或程序界面中的版权标注。
+
+You must keep this agreement in full and the copyright notice above with all
+copies and derivative works, and must not remove, obscure or alter any
+copyright notice in the source files, documentation or program interface.
+
+
+--------------------------------------------------------------------------
+4. 不得转让 / No Transfer
+--------------------------------------------------------------------------
+
+你不得再许可、出租、出售、转让或以其他方式处分本协议或本软件，亦不
+得将本协议授予的权利提供给任何第三方。
+
+You may not sublicense, rent, sell, transfer or otherwise dispose of this
+agreement or this software, nor make the rights granted here available to
+any third party.
+
+
+--------------------------------------------------------------------------
+5. 无担保 / No Warranty
+--------------------------------------------------------------------------
+
+本软件按「现状」提供，不附带任何明示或默示的担保，包括但不限于对
+适销性、特定用途适用性及不侵权的担保。你自行承担使用本软件的全部
+风险，包括但不限于显示配置错误、显示输出中断或其他设备与数据的
+损失。
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. You bear the entire
+risk of using this software, including but not limited to misconfigured
+display settings, loss of display output, or other damage to devices or data.
+
+
+--------------------------------------------------------------------------
+6. 责任限制 / Limitation of Liability
+--------------------------------------------------------------------------
+
+在适用法律允许的最大范围内，版权持有人在任何情况下均不对因本软件或
+本协议产生的任何索赔、损害或其他责任负责，无论该责任基于合同、侵权
+还是其他事由。
+
+TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, THE COPYRIGHT HOLDER
+SHALL IN NO EVENT BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY
+ARISING FROM THIS SOFTWARE OR THIS AGREEMENT, WHETHER IN AN ACTION OF
+CONTRACT, TORT OR OTHERWISE.
+
+
+--------------------------------------------------------------------------
+7. 终止 / Termination
+--------------------------------------------------------------------------
+
+一旦你违反本协议的任何条款，本协议授予你的全部许可立即自动终止，无
+需另行通知。终止后你必须立即停止使用本软件并删除其全部副本。本协议
+中关于署名、无担保与责任限制的条款在终止后继续有效。
+
+Your licenses under this agreement terminate automatically and immediately
+if you breach any of its terms, without further notice. Upon termination you
+must stop using the software and delete all copies. The sections on
+attribution, warranty disclaimer and limitation of liability survive
+termination.
+
+
+--------------------------------------------------------------------------
+8. 商业授权 / Commercial Licensing
+--------------------------------------------------------------------------
+
+如需将本软件用于商业目的，请通过以下地址联系版权持有人获取书面授权：
+
+To obtain written permission for commercial use, contact the copyright
+holder at:
+
+  https://github.com/lhsheung
+
+
+--------------------------------------------------------------------------
+本协议以中文版本为准；英文版本仅为方便理解而提供。
+In case of any discrepancy, the Chinese version prevails.
