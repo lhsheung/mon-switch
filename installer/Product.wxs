@@ -91,6 +91,30 @@
                            PromptToContinue="no"
                            RebootPrompt="no" />
 
+    <!--
+      The destination folder is now a real user choice (see WixUI_InstallDir below), and that
+      breaks a naive assumption: Windows Installer does NOT remember a directory property that
+      was supplied on the command line, so at uninstall time INSTALLFOLDER resolves back to its
+      default and the files in the chosen folder are never found. Measured on this machine with
+      "msiexec /i ... INSTALLFOLDER=C:\...\altdir": install wrote all four files there, the
+      product property INSTALLFOLDER came back empty, and uninstall left all four files behind.
+
+      The fix is to mirror the resolved path into the registry at install time and read it back
+      during the uninstall sequence, then hand it to util:RemoveFolderEx. The registry read
+      happens early in the sequence (AppSearch), long before RemoveRegistryValues deletes this
+      value, so the path is still available when it is needed.
+
+      Both flavours write to their own hive: HKCU for the per-user package, HKLM for the
+      per-machine one, matching KeyPathRoot.
+    -->
+    <Property Id="MONSWITCHINSTALLDIR">
+      <RegistrySearch Id="RS_InstallDir"
+                      Root="$(var.KeyPathRoot)"
+                      Key="Software\mon-switch"
+                      Name="installDir"
+                      Type="raw" />
+    </Property>
+
     <?if $(var.InstallScope) = "perMachine" ?>
       <StandardDirectory Id="ProgramFiles6432Folder">
         <Directory Id="INSTALLFOLDER" Name="mon-switch" />
@@ -135,19 +159,31 @@
       <RegistryValue Root="HKCU" Key="Software\mon-switch" Name="uninstallShortcut" Type="integer" Value="1" KeyPath="yes" />
     </Component>
 
+    <!--
+      Cleans up whatever folder the user actually chose. RemoveFolderEx walks the whole tree, so
+      it still works if the folder somehow gained extra files; the plain RemoveFolder is kept as
+      well because it is what satisfies ICE64 for the per-user flavour, and it costs nothing when
+      the directory has already gone.
+
+      The string value is the record of the chosen path that MONSWITCHINSTALLDIR reads back on
+      uninstall. installFolder stays the component KeyPath, as ICE38/ICE43 require for a
+      component whose directory sits under the user profile.
+    -->
+    <Component Id="C_InstallFolder" Directory="INSTALLFOLDER" Guid="B7D2E9F4-3A15-4C86-8E2B-5F9A1C7D3E60">
+      <util:RemoveFolderEx On="uninstall" Property="MONSWITCHINSTALLDIR" />
+      <RemoveFolder Id="RF_InstallFolder" On="uninstall" />
+      <RegistryValue Root="$(var.KeyPathRoot)" Key="Software\mon-switch" Name="installDir" Type="string" Value="[INSTALLFOLDER]" />
+      <RegistryValue Root="$(var.KeyPathRoot)" Key="Software\mon-switch" Name="installFolder" Type="integer" Value="1" KeyPath="yes" />
+    </Component>
+
     <?if $(var.InstallScope) = "perMachine" ?>
-      <!-- Nothing to clean up: Program Files is not under a user profile. -->
+      <!-- Program Files is not under a user profile, so there is no extra folder to register. -->
     <?else ?>
       <!--
         Directories under the user profile must be registered for removal (ICE64).
         RemoveFolder deletes a directory only when it is empty, so an unrelated
         "%LocalAppData%\Programs" belonging to other software is left untouched.
       -->
-      <Component Id="C_InstallFolder" Directory="INSTALLFOLDER" Guid="B7D2E9F4-3A15-4C86-8E2B-5F9A1C7D3E60">
-        <RemoveFolder Id="RF_InstallFolder" On="uninstall" />
-        <RegistryValue Root="HKCU" Key="Software\mon-switch" Name="installFolder" Type="integer" Value="1" KeyPath="yes" />
-      </Component>
-
       <Component Id="C_ProgramsFolder" Directory="ProgramsFolder" Guid="C8E3F0A5-4B26-5D97-9F3C-6A0B2D8E4F71">
         <RemoveFolder Id="RF_ProgramsFolder" On="uninstall" />
         <RegistryValue Root="HKCU" Key="Software\mon-switch" Name="programsFolder" Type="integer" Value="1" KeyPath="yes" />
@@ -156,16 +192,33 @@
 
     <Feature Id="Main" Title="mon-switch" Level="1">
       <ComponentRef Id="C_App" />
+      <ComponentRef Id="C_InstallFolder" />
       <ComponentRef Id="C_StartMenuShortcut" />
       <ComponentRef Id="C_UninstallShortcut" />
       <?if $(var.InstallScope) = "perUser" ?>
-        <ComponentRef Id="C_InstallFolder" />
         <ComponentRef Id="C_ProgramsFolder" />
       <?endif ?>
     </Feature>
 
-    <ui:WixUI Id="WixUI_Minimal" />
+    <!--
+      WixUI_InstallDir rather than WixUI_Minimal: it inserts the InstallDirDlg page, which is
+      what lets the user change the destination folder. The wizard becomes
+
+        Welcome -> Licence -> Destination Folder -> Ready to install -> Progress -> Finish
+
+      WIXUI_INSTALLDIR names the directory that page edits. It has to be the same id the
+      components install into (INSTALLFOLDER below), otherwise the chosen path is discarded and
+      the files land wherever the .wxs originally put them.
+
+      One consequence worth knowing for the perUser package: the folder is a real free-text
+      choice, so a user can point it at Program Files, where a non-elevated install cannot
+      write. Windows Installer then fails part way through. That is ordinary MSI behaviour for
+      a per-user package and there is no reliable way to pre-validate an arbitrary path without
+      shipping a custom action, so the README documents it instead.
+    -->
+    <ui:WixUI Id="WixUI_InstallDir" />
     <WixVariable Id="WixUILicenseRtf" Value="license.rtf" />
+    <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
 
     <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOXTEXT" Value="Start mon-switch now" />
     <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOX" Value="1" />
