@@ -619,9 +619,23 @@ internal sealed class SettingsForm : Form
         bool registered = AutoStartService.IsRegistered;
         bool pointsHere = AutoStartService.PointsHere;
 
-        string state = registered
-            ? pointsHere ? Loc.T("settings.autoStartOn") : Loc.T("settings.autoStartStale")
-            : Loc.T("settings.autoStartOff");
+        // Three situations look similar in the registry but mean different things: no entry at
+        // all, an entry pointing at a different copy, and an entry Windows has been told to skip.
+        // Only the last one reads as "on" while still doing nothing at logon, so it gets its own
+        // wording - otherwise the tick box appears to be lying to the user.
+        string state;
+        if (!registered)
+        {
+            state = Loc.T("settings.autoStartOff");
+        }
+        else if (AutoStartService.IsDisabledByWindows)
+        {
+            state = Loc.T("settings.autoStartBlocked");
+        }
+        else
+        {
+            state = pointsHere ? Loc.T("settings.autoStartOn") : Loc.T("settings.autoStartStale");
+        }
 
         _lblAutoStartState.Text = Loc.T("settings.autoStartActual", state);
     }

@@ -419,7 +419,17 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private IReadOnlyList<string> ApplyCurrentSettings()
     {
         AppLog.Configure(_settings.Current.EnableLog);
+
+        // The dialog has already written settings.json at this point, so the Run entry has to be
+        // brought in line here as well. Without this call the tick box only reached the JSON
+        // file: nothing was written to the registry, the dialog then reported "disabled" from
+        // its own state label, and auto-start could never be turned on.
+        SynchroniseAutoStart(force: true);
+
         IReadOnlyList<string> failures = RegisterAllHotkeys(notifyFailures: false);
+
+        // Runs after the sync above so the tray tick and the dialog's state label both read the
+        // registry as it now stands.
         ApplyLocalization();
         return failures;
     }
@@ -460,11 +470,15 @@ internal sealed class TrayApplicationContext : ApplicationContext
         return failures;
     }
 
-    private void SynchroniseAutoStart()
+    /// <param name="force">
+    /// True when the user just asked for this in the settings dialog, which should override a
+    /// "disabled" flag sitting in Windows' own startup list.
+    /// </param>
+    private void SynchroniseAutoStart(bool force = false)
     {
         AppSettings current = _settings.Current;
 
-        if (AutoStartService.TrySynchronise(current.AutoStart, out string? error))
+        if (AutoStartService.TrySynchronise(current.AutoStart, force, out string? error))
         {
             return;
         }

@@ -19,6 +19,20 @@ internal static class AutoStartService
 {
     private const string RunKeyPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
 
+    /// <summary>
+    /// Windows keeps a second, independent switch for every Run entry under this key. The
+    /// value is a REG_BINARY blob whose first byte says whether the entry is allowed to run.
+    /// Task Manager and Settings &gt; Apps &gt; Startup write it, and when it says "off" the
+    /// entry is skipped at logon even though the Run value itself is still present. Without
+    /// reading this, mon-switch would report "enabled" while Windows quietly ignored it.
+    /// </summary>
+    private const string StartupApprovedPath =
+        @"Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run";
+
+    private const byte StartupApprovedEnabled = 0x02;
+    private const byte StartupApprovedEnabledLegacy = 0x06;
+    private const byte StartupApprovedDisabled = 0x03;
+
     /// <summary>The real .exe, also when the app is launched as "dotnet mon-switch.dll".</summary>
     public static string ExecutablePath
     {
@@ -99,6 +113,61 @@ internal static class AutoStartService
         }
     }
 
+    /// <summary>
+    /// True when the Run entry exists but Windows has been told to skip it. Task Manager, or
+    /// Settings &gt; Apps &gt; Startup, writes that flag; the entry then stays visible in the
+    /// registry while never actually running, which looks exactly like "auto-start is broken".
+    /// </summary>
+    public static bool IsDisabledByWindows
+    {
+        get
+        {
+            try
+            {
+                using RegistryKey? key = Registry.CurrentUser.OpenSubKey(StartupApprovedPath, writable: false);
+                if (key?.GetValue(AppInfo.RunValueName) is byte[] { Length: > 0 } blob)
+                {
+                    // 0x02 is the normal "allowed" byte and 0x06 is the older equivalent; the
+                    // shell writes 0x03 when the entry is switched off. Anything else is
+                    // treated as "not allowed", because assuming it runs would hide the very
+                    // problem this property exists to detect.
+                    return blob[0] != StartupApprovedEnabled && blob[0] != StartupApprovedEnabledLegacy;
+                }
+            }
+            catch (Exception ex)
+            {
+                AppLog.Warn("the StartupApproved flag could not be read: " + ex.Message);
+            }
+
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Removes the "skip this entry" flag so that enabling auto-start really takes effect at the
+    /// next logon. Deleting the value is the documented way to put the entry back to allowed.
+    /// </summary>
+    private static void ClearWindowsDisableFlag()
+    {
+        try
+        {
+            using RegistryKey? key = Registry.CurrentUser.OpenSubKey(StartupApprovedPath, writable: true);
+            if (key is null)
+            {
+                return;
+            }
+
+            key.DeleteValue(AppInfo.RunValueName, throwOnMissingValue: false);
+            AppLog.Info("StartupApproved flag cleared");
+        }
+        catch (Exception ex)
+        {
+            // Not fatal: the Run entry is written either way, and the settings dialog reports
+            // the remaining flag through IsDisabledByWindows.
+            AppLog.Warn("the StartupApproved flag could not be cleared: " + ex.Message);
+        }
+    }
+
     public static bool TrySet(bool enabled, out string? error)
     {
         error = null;
@@ -112,6 +181,11 @@ internal static class AutoStartService
             {
                 key.SetValue(AppInfo.RunValueName, CommandLine, RegistryValueKind.String);
                 AppLog.Info("auto-start entry written: " + CommandLine);
+
+                // Writing the Run value is not enough on its own: if Windows still carries a
+                // "disabled" marker for this name from an earlier trip through Task Manager, the
+                // entry would never run. Clear it so the switch the user just flipped is real.
+                ClearWindowsDisableFlag();
             }
             else
             {
@@ -130,14 +204,20 @@ internal static class AutoStartService
     }
 
     /// <summary>
-    /// Brings the registry in line with the setting at start-up. Also repairs the case where
-    /// the app was moved to another folder and the stored path went stale.
+    /// Brings the registry in line with the setting. Also repairs the case where the app was
+    /// moved to another folder and the stored path went stale.
     /// </summary>
-    public static bool TrySynchronise(bool desired, out string? error)
+    /// <param name="force">
+    /// Rewrite the entry even when it already looks right. The settings dialog passes true, so
+    /// that a "disabled" flag left behind by Task Manager is cleared when the user explicitly
+    /// asks for auto-start. Start-up passes false, so a deliberate choice made elsewhere is
+    /// respected rather than silently undone on every launch.
+    /// </param>
+    public static bool TrySynchronise(bool desired, bool force, out string? error)
     {
         error = null;
 
-        if (desired && !PointsHere)
+        if (desired && (force || !PointsHere))
         {
             return TrySet(true, out error);
         }

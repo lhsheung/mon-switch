@@ -85,6 +85,7 @@
   "settings.autoStartOn": "enabled",
   "settings.autoStartOff": "disabled",
   "settings.autoStartStale": "enabled, but pointing at a different copy of mon-switch",
+  "settings.autoStartBlocked": "enabled, but switched off in Windows startup apps",
   "settings.currentMode": "Mode detected right now: {0}",
   "settings.cycleHint": "Tick the modes that take part in cycling, then reorder them. The list order is the cycle order.",
   "settings.cycleUp": "Move up",

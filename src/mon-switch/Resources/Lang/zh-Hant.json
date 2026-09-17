@@ -85,6 +85,7 @@
   "settings.autoStartOn": "已啟用",
   "settings.autoStartOff": "未啟用",
   "settings.autoStartStale": "已啟用，但指向另一個位置的 mon-switch",
+  "settings.autoStartBlocked": "已啟用，但已被 Windows 的「啟動應用程式」停用",
   "settings.currentMode": "目前偵測到的模式：{0}",
   "settings.cycleHint": "勾選要參與循環的模式，再以「上移／下移」調整順序。清單順序即為切換順序。",
   "settings.cycleUp": "上移",
