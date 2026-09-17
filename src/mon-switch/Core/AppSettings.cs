@@ -25,6 +25,28 @@ internal sealed class AppSettings
 
     public bool EnableLog { get; set; }
 
+    /// <summary>
+    /// Show a small always-reachable switcher window.
+    ///
+    /// Windows only puts the notification area on one taskbar. With the taskbar set to appear
+    /// on all displays, secondary monitors still get no tray, so after switching to "second
+    /// screen only" there may be no icon anywhere the user can reach without a hotkey. The mini
+    /// switcher is not a tray icon - it is mon-switch's own window, which is why it can be put
+    /// on any screen without touching Explorer.
+    /// </summary>
+    public bool MiniSwitcher { get; set; }
+
+    /// <summary>One copy per screen, rather than a single one the user has to drag around.</summary>
+    public bool MiniOnEveryScreen { get; set; } = true;
+
+    public bool MiniAlwaysOnTop { get; set; } = true;
+
+    /// <summary>0.3 to 1.0. Below 1.0 the window stays legible but recedes.</summary>
+    public double MiniOpacity { get; set; } = 0.92;
+
+    /// <summary>Remembered position per screen, keyed by device name (\\.\DISPLAY1 and friends).</summary>
+    public Dictionary<string, MiniPlacement> MiniPositions { get; set; } = new(StringComparer.Ordinal);
+
     public HotkeyBinding CycleHotkey { get; set; } = DefaultCycleHotkey();
 
     /// <summary>Keyed by <see cref="DisplayModes.ToId"/>.</summary>
@@ -41,6 +63,11 @@ internal sealed class AppSettings
             ShowNotifications = ShowNotifications,
             AutoStart = AutoStart,
             EnableLog = EnableLog,
+            MiniSwitcher = MiniSwitcher,
+            MiniOnEveryScreen = MiniOnEveryScreen,
+            MiniAlwaysOnTop = MiniAlwaysOnTop,
+            MiniOpacity = MiniOpacity,
+            MiniPositions = new Dictionary<string, MiniPlacement>(StringComparer.Ordinal),
             CycleHotkey = CycleHotkey.Clone(),
             DirectHotkeys = new Dictionary<string, HotkeyBinding>(StringComparer.Ordinal),
         };
@@ -48,6 +75,14 @@ internal sealed class AppSettings
         foreach (KeyValuePair<string, HotkeyBinding> pair in DirectHotkeys)
         {
             clone.DirectHotkeys[pair.Key] = pair.Value.Clone();
+        }
+
+        foreach (KeyValuePair<string, MiniPlacement> pair in MiniPositions)
+        {
+            if (pair.Value is not null)
+            {
+                clone.MiniPositions[pair.Key] = pair.Value.Clone();
+            }
         }
 
         return clone;
@@ -87,6 +122,19 @@ internal sealed class AppSettings
         DirectHotkeys ??= new Dictionary<string, HotkeyBinding>(StringComparer.Ordinal);
         CycleHotkey ??= new HotkeyBinding();
         Language ??= AppLanguages.SystemCode;
+        MiniPositions ??= new Dictionary<string, MiniPlacement>(StringComparer.Ordinal);
+
+        // Drop entries a hand-edited file could have left without a value, otherwise the
+        // mini switcher would read a null placement and throw while positioning itself.
+        foreach (string key in MiniPositions.Where(p => p.Value is null).Select(p => p.Key).ToList())
+        {
+            MiniPositions.Remove(key);
+        }
+
+        if (MiniOpacity < 0.3 || MiniOpacity > 1.0 || double.IsNaN(MiniOpacity))
+        {
+            MiniOpacity = 0.92;
+        }
 
         if (Version < CurrentVersion)
         {

@@ -1,4 +1,5 @@
 using System.Reflection;
+using Microsoft.Win32;
 using MonSwitch.Core;
 using MonSwitch.Services;
 using MonSwitch.UI;
@@ -37,6 +38,9 @@ internal sealed class TrayApplicationContext : ApplicationContext
 
     private readonly Dictionary<DisplayMode, ToolStripMenuItem> _directItems = new();
     private readonly Dictionary<AppLanguage, ToolStripMenuItem> _languageItems = new();
+
+    /// <summary>One mini switcher per screen, when the feature is on.</summary>
+    private readonly List<MiniSwitcherForm> _miniWindows = new();
 
     private SettingsForm? _openSettingsForm;
     private bool _switchInProgress;
@@ -83,6 +87,12 @@ internal sealed class TrayApplicationContext : ApplicationContext
         ApplyLocalization();
         RegisterAllHotkeys(notifyFailures: true);
         SynchroniseAutoStart();
+
+        // Rebuilt on display change rather than polled: monitors can be plugged in, removed or
+        // re-detected at any time, and SystemEvents gives us that as an event.
+        SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged;
+        RebuildMiniSwitchers();
+
         ReportRepairedSettings();
 
         AppLog.Info($"{AppInfo.Name} {AppInfo.VersionText} started, current mode = {_display.GetCurrentMode()}");
@@ -233,6 +243,10 @@ internal sealed class TrayApplicationContext : ApplicationContext
 
         _menu.Refresh();
         RefreshMenuState();
+
+        // Runs last: the switcher text is built from the same lookups, so it has to be rebuilt
+        // after the language has actually changed.
+        RefreshMiniSwitchers();
     }
 
     private void RefreshMenuState()
@@ -323,6 +337,10 @@ internal sealed class TrayApplicationContext : ApplicationContext
         finally
         {
             _switchInProgress = false;
+
+            // Either way the mini switcher has to be brought up to date: a switch changes the
+            // mode it shows, and a failed switch leaves the mode it shows correct but stale.
+            RefreshMiniSwitchers();
         }
     }
 
@@ -377,6 +395,149 @@ internal sealed class TrayApplicationContext : ApplicationContext
         form.ShowDialog();
     }
 
+    // ---------------------------------------------------------------- mini switcher
+
+    private void OnDisplaySettingsChanged(object? sender, EventArgs e)
+    {
+        AppLog.Info("display settings changed, rebuilding the mini switcher windows");
+
+        // Worst case the callback arrives off the UI thread, and touching a Form from there is
+        // not allowed. Marshalling through the sink keeps every window on one thread.
+        _hotkeys.RunOnUiThread(RebuildMiniSwitchers);
+    }
+
+    /// <summary>
+    /// Creates, removes or repositions the mini switchers so they match the current setting and
+    /// the current set of screens. Safe to call repeatedly.
+    /// </summary>
+    private void RebuildMiniSwitchers()
+    {
+        CloseMiniSwitchers();
+
+        AppSettings current = _settings.Current;
+        if (!current.MiniSwitcher)
+        {
+            return;
+        }
+
+        Screen[] screens = Screen.AllScreens;
+        if (screens.Length == 0)
+        {
+            return;
+        }
+
+        IEnumerable<Screen> wanted = current.MiniOnEveryScreen
+            ? screens
+            : [screens.FirstOrDefault(s => s.Primary) ?? screens[0]];
+
+        foreach (Screen screen in wanted)
+        {
+            MiniSwitcherForm form = CreateMiniSwitcher(screen);
+            _miniWindows.Add(form);
+        }
+
+        AppLog.Info($"mini switcher: {_miniWindows.Count} window(s) shown");
+        RefreshMiniSwitchers();
+    }
+
+    private MiniSwitcherForm CreateMiniSwitcher(Screen screen)
+    {
+        AppSettings current = _settings.Current;
+        string key = screen.DeviceName;
+
+        var form = new MiniSwitcherForm(
+            key,
+            Point.Empty,
+            current.MiniAlwaysOnTop,
+            current.MiniOpacity);
+
+        form.SetContent(MiniSwitcherText());
+
+        form.Location = PlacementFor(screen, form);
+
+        form.RequestCycle += (_, _) => CycleNext(interactive: true);
+        form.RequestMenu += (_, point) =>
+        {
+            // The right-click menu is the same one the tray uses, shown at the click point.
+            RefreshMenuState();
+            _menu.Show(form, point);
+        };
+        form.Moved += (_, _) =>
+        {
+            current.MiniPositions[key] = new MiniPlacement { X = form.Left, Y = form.Top };
+            _settings.Save(current, out _);
+            AppLog.Info($"mini switcher moved on {key} to ({form.Left}, {form.Top})");
+        };
+
+        form.Show();
+        return form;
+    }
+
+    private Point PlacementFor(Screen screen, MiniSwitcherForm form)
+    {
+        AppSettings current = _settings.Current;
+
+        if (current.MiniPositions.TryGetValue(screen.DeviceName, out MiniPlacement? saved) && saved is not null)
+        {
+            // A remembered position is honoured only while it still lands on a screen: after a
+            // monitor is unplugged the old coordinates can point into dead space.
+            if (Screen.AllScreens.Any(s => s.Bounds.Contains(new Point(saved.X, saved.Y))))
+            {
+                return new Point(saved.X, saved.Y);
+            }
+        }
+
+        Rectangle area = screen.WorkingArea;
+        int x = area.Right - form.Width - 12;
+        int y = area.Bottom - form.Height - 12;
+        return new Point(Math.Max(area.Left + 4, x), Math.Max(area.Top + 4, y));
+    }
+
+    /// <summary>Refreshes the text on every mini switcher, for example after a switch.</summary>
+    private void RefreshMiniSwitchers()
+    {
+        if (_miniWindows.Count == 0)
+        {
+            return;
+        }
+
+        string text = MiniSwitcherText();
+        foreach (MiniSwitcherForm form in _miniWindows)
+        {
+            form.SetContent(text);
+        }
+    }
+
+    private string MiniSwitcherText()
+    {
+        DisplayMode mode = _display.GetCurrentMode();
+
+        // Same guard the tray menu uses: an unrecognised topology must read as "unknown" rather
+        // than as whichever enum value happens to match.
+        string label = mode.IsSelectable() ? mode.Label() : Loc.T(DisplayMode.Unknown.LabelKey());
+        return Loc.T("mini.label", label);
+    }
+
+    private void ApplyMiniLook()
+    {
+        AppSettings current = _settings.Current;
+        foreach (MiniSwitcherForm form in _miniWindows)
+        {
+            form.ApplyLook(current.MiniAlwaysOnTop, current.MiniOpacity);
+        }
+    }
+
+    private void CloseMiniSwitchers()
+    {
+        foreach (MiniSwitcherForm form in _miniWindows)
+        {
+            form.Hide();
+            form.Dispose();
+        }
+
+        _miniWindows.Clear();
+    }
+
     private void OpenSettings()
     {
         if (_openSettingsForm is not null)
@@ -425,6 +586,10 @@ internal sealed class TrayApplicationContext : ApplicationContext
         // file: nothing was written to the registry, the dialog then reported "disabled" from
         // its own state label, and auto-start could never be turned on.
         SynchroniseAutoStart(force: true);
+
+        // Rebuilt rather than tweaked: the switcher may have been switched on or off, moved to
+        // "every screen", or given a new opacity, and screens may have appeared or gone.
+        RebuildMiniSwitchers();
 
         IReadOnlyList<string> failures = RegisterAllHotkeys(notifyFailures: false);
 
@@ -573,6 +738,12 @@ internal sealed class TrayApplicationContext : ApplicationContext
         if (disposing)
         {
             LocalizationService.Instance.LanguageChanged -= OnLanguageChanged;
+            SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged;
+
+            // The mini switchers are real top-level windows; leaving them alive would keep the
+            // message loop from ever ending, which is exactly the "invisible process" this
+            // application is designed not to have.
+            CloseMiniSwitchers();
 
             try
             {

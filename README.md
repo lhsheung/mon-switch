@@ -44,6 +44,7 @@ Windows 本身有四種投影模式（即 `Win+P` 那四個）：
 - **右鍵選單** → 切換、直接切換到指定模式、顯示切換通知、設定、開機自動啟動、語言、關於、結束。
 - **切換後通知** → 例如「已切換至：延伸」；失敗則顯示原因，例如「切換失敗：你的系統不支援這個模式」。
 - **開機自動啟動**（預設關閉）→ 登入後靜默常駐，不會彈出任何視窗。
+- **副屏迷你切換器**（預設關閉）→ 一個小視窗，可放在**任何一個螢幕**上；點擊循環切換，右鍵叫出完整選單。解決「人在副屏、卻碰不到 mon-switch」這個問題，詳見 [使用方法](#10-使用方法)。
 - **四種介面語言** → 粵語（香港）、繁體中文、簡體中文、英文，切換即時生效。
 
 ---
@@ -216,6 +217,11 @@ HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run
   "showNotifications": true,
   "autoStart": false,
   "enableLog": false,
+  "miniSwitcher": false,
+  "miniOnEveryScreen": true,
+  "miniAlwaysOnTop": true,
+  "miniOpacity": 0.92,
+  "miniPositions": {},
   "cycleHotkey": { "enabled": true, "modifiers": 7, "virtualKey": 77 },
   "directHotkeys": {
     "InternalOnly": { "enabled": true, "modifiers": 7, "virtualKey": 49 },
@@ -227,6 +233,8 @@ HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run
 ```
 
 `modifiers` 是 `MOD_*` 位元組合（Alt=1、Ctrl=2、Shift=4、Win=8），`virtualKey` 是 Windows 虛擬鍵碼。`cycleModes` 的**順序就是切換順序**，只列出勾選的模式。
+
+迷你切換器相關欄位：`miniSwitcher` 是總開關；`miniOnEveryScreen` 為 `true` 時每個螢幕各顯示一個；`miniAlwaysOnTop` 控制是否永遠置頂；`miniOpacity` 是 0.3 至 1.0 的不透明度；`miniPositions` 以螢幕裝置名稱為鍵記住拖曳後的位置，例如 `{"\\\\.\\DISPLAY1": {"x": 1200, "y": 980}}`。
 
 設定視窗內有兩個「開啟資料夾」連結，會直接用檔案總管打開以上位置。
 
@@ -501,11 +509,42 @@ error NETSDK1175: 啟用修剪功能時，不支援或不建議使用 Windows Fo
 
 當前的模式在「直接切換至」子選單內會顯示打勾標記。
 
+### 副屏迷你切換器
+
+**為什麼需要它。** Windows 只會在**其中一個**工作列顯示通知區域。即使開啟「在所有顯示器上顯示工作列」，副屏的工作列仍然沒有系統托盤。於是有兩種常見情形會讓人碰不到 mon-switch：
+
+- 在延伸模式下於副屏工作，托盤卻只在主屏；
+- 切到「只第二屏幕」之後，主屏不再顯示。
+
+**它是什麼。** 一個 mon-switch 自己的小視窗，可放在**任何一個螢幕**上：
+
+```
+┌──────────────────┐
+│ 屏幕：延伸        │   ← 點擊＝循環切換；右鍵＝完整選單；拖曳＝移動位置
+└──────────────────┘
+```
+
+在設定 → **一般** → **迷你切換器** 開啟，預設關閉。選項有：
+
+| 設定 | 預設 | 說明 |
+| --- | --- | --- |
+| 顯示迷你切換器 | 關閉 | 總開關 |
+| 每個屏幕各顯示一個 | 開啟 | 每個螢幕各放一個；關閉則只在主屏放一個 |
+| 保持置於其他視窗之上 | 開啟 | 關掉後它會被其他視窗遮住 |
+
+拖動後的位置會依**螢幕裝置名稱**記住（`\\.\DISPLAY1` 等），重開機後仍在原處；若該螢幕已不存在（例如拔掉了），就會回到右下角而不是落在看不到的地方。螢幕數目變化時會自動重建 —— 這是監聽 `DisplaySettingsChanged` 事件，**不是輪詢**。
+
+**它不是系統托盤，這一點要講清楚。** 通知區域屬於 Explorer，一個應用程式無法要求把自己的圖示畫到另一個螢幕上，那個決定完全在 Explorer 內部。市面上唯一能做到「副屏也顯示系統托盤」的做法，是 Windhawk 的 [Taskbar multi-tray](https://windhawk.net/mods/taskbar-multi-tray) mod：它把 DLL 注入 `explorer.exe`，再去 hook Windows 11 工作列的私有 XAML 元素（`SystemTrayFrame`、`NotifyIconStack`、`NotificationAreaIcons`、`ControlCenterButton`）、`taskbar.dll` 的私有符號（`TrayUI::StartTaskbar`、`CSecondaryTray::InitModelAndHost`）、未公開的內部訊息 `0x5B8`，以及 `IFlyoutBase::ShowAt` 的 vtable 槽位。
+
+本專案**刻意不做**這件事，理由很實際：那需要管理員權限（注入系統行程）、只支援 Windows 11（Windows 10 完全不適用）、依賴微軟未公開的內部實作（每次功能更新都可能失效，原作者亦列出多項已知問題），而且程式碼規模是上千行。這些代價與本專案「免管理員、零依賴、低佔用、事件驅動」的目標正面衝突。
+
+**如果你要的是「系統托盤本身」出現在副屏**，那唯一的務實做法是安裝 Windhawk 並啟用 Taskbar multi-tray mod（該 mod 由 Windhawk 社群維護，與本專案無關，請自行評估）。mon-switch 的托盤圖示到時自然會一併出現在副屏。迷你切換器則是「不動系統、也能在副屏操作 mon-switch」的另一條路。
+
 ### 設定視窗
 
 分四個頁籤：
 
-- **一般** — 是否讓雙擊切換生效、是否顯示切換通知、開機自動啟動（附登錄檔實際狀態）、當前偵測到的模式。
+- **一般** — 是否讓雙擊切換生效、是否顯示切換通知、開機自動啟動（附登錄檔實際狀態）、迷你切換器（附用途說明）、當前偵測到的模式。
 - **循環** — 用勾選清單決定哪些模式參與循環，用「上移／下移」調整順序。**清單順序就是切換順序**；未勾選的模式仍會列出但不參與。
 - **快捷鍵** — 五行：循環切換 ＋ 四個模式。每行有「啟用」勾選（停用）與「清除」按鈕。點進輸入框後直接按組合鍵即可錄製。
 - **語言與診斷** — 介面語言、診斷日誌開關、開啟設定檔／日誌資料夾的連結。

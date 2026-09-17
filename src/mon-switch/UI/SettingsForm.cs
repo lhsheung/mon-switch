@@ -47,6 +47,12 @@ internal sealed class SettingsForm : Form
     private readonly CheckBox _cbAutoStart = new();
     private readonly Label _lblAutoStartState = new();
 
+    private readonly GroupBox _gbMini = new();
+    private readonly CheckBox _cbMiniEnable = new();
+    private readonly CheckBox _cbMiniEveryScreen = new();
+    private readonly CheckBox _cbMiniAlwaysOnTop = new();
+    private readonly Label _lblMiniHint = new();
+
     private readonly Label _lblCycleHint = new();
     private readonly CheckedListBox _cycleList = new();
     private readonly Button _btnCycleUp = new();
@@ -159,8 +165,37 @@ internal sealed class SettingsForm : Form
 
         _gbStartup.Controls.AddRange([_cbAutoStart, _lblAutoStartState]);
 
+        // --- Mini switcher -------------------------------------------------
+        // Placed after the startup group because it answers the question people actually hit:
+        // "I am on the other monitor and cannot reach mon-switch".
+        _gbMini.Location = new Point(18, 236);
+        _gbMini.Size = new Size(608, 156);
+
+        _cbMiniEnable.AutoSize = true;
+        _cbMiniEnable.Location = new Point(16, 26);
+        _cbMiniEnable.Size = new Size(576, 24);
+        _cbMiniEnable.CheckedChanged += (_, _) =>
+        {
+            UpdateMiniEnabledState();
+        };
+
+        _cbMiniEveryScreen.AutoSize = true;
+        _cbMiniEveryScreen.Location = new Point(16, 54);
+        _cbMiniEveryScreen.Size = new Size(576, 24);
+
+        _cbMiniAlwaysOnTop.AutoSize = true;
+        _cbMiniAlwaysOnTop.Location = new Point(16, 82);
+        _cbMiniAlwaysOnTop.Size = new Size(576, 24);
+
+        _lblMiniHint.AutoSize = false;
+        _lblMiniHint.Location = new Point(18, 110);
+        _lblMiniHint.Size = new Size(572, 38);
+        _lblMiniHint.ForeColor = SystemColors.GrayText;
+
+        _gbMini.Controls.AddRange([_cbMiniEnable, _cbMiniEveryScreen, _cbMiniAlwaysOnTop, _lblMiniHint]);
+
         _lblCurrentMode.AutoSize = false;
-        _lblCurrentMode.Location = new Point(18, 250);
+        _lblCurrentMode.Location = new Point(18, 404);
         _lblCurrentMode.Size = new Size(608, 22);
         _lblCurrentMode.ForeColor = SystemColors.GrayText;
 
@@ -170,6 +205,7 @@ internal sealed class SettingsForm : Form
             _lblDoubleClickHint,
             _cbNotifications,
             _gbStartup,
+            _gbMini,
             _lblCurrentMode,
         ]);
 
@@ -379,6 +415,10 @@ internal sealed class SettingsForm : Form
         _cbNotifications.Checked = _draft.ShowNotifications;
         _cbAutoStart.Checked = _draft.AutoStart;
         _cbEnableLog.Checked = _draft.EnableLog;
+        _cbMiniEnable.Checked = _draft.MiniSwitcher;
+        _cbMiniEveryScreen.Checked = _draft.MiniOnEveryScreen;
+        _cbMiniAlwaysOnTop.Checked = _draft.MiniAlwaysOnTop;
+        UpdateMiniEnabledState();
 
         _cycleRow.Box.SetBindingSilently(_draft.CycleHotkey.Clone());
         _cycleRow.Toggle.Checked = _draft.CycleHotkey.IsActive;
@@ -404,6 +444,9 @@ internal sealed class SettingsForm : Form
         _draft.ShowNotifications = _cbNotifications.Checked;
         _draft.AutoStart = _cbAutoStart.Checked;
         _draft.EnableLog = _cbEnableLog.Checked;
+        _draft.MiniSwitcher = _cbMiniEnable.Checked;
+        _draft.MiniOnEveryScreen = _cbMiniEveryScreen.Checked;
+        _draft.MiniAlwaysOnTop = _cbMiniAlwaysOnTop.Checked;
 
         if (_cboLanguage.SelectedItem is LanguageEntry entry)
         {
@@ -640,6 +683,17 @@ internal sealed class SettingsForm : Form
         _lblAutoStartState.Text = Loc.T("settings.autoStartActual", state);
     }
 
+    /// <summary>
+    /// Greys out the two options that only mean anything once the switcher is switched on, so
+    /// the group does not read as three independent settings.
+    /// </summary>
+    private void UpdateMiniEnabledState()
+    {
+        bool on = _cbMiniEnable.Checked;
+        _cbMiniEveryScreen.Enabled = on;
+        _cbMiniAlwaysOnTop.Enabled = on;
+    }
+
     private void UpdateCurrentMode()
     {
         DisplayMode current = _displayService.GetCurrentMode();
@@ -666,6 +720,12 @@ internal sealed class SettingsForm : Form
         _gbStartup.Text = Loc.T("settings.group.startup");
         _cbAutoStart.Text = Loc.T("settings.autoStart");
         UpdateAutoStartState();
+
+        _gbMini.Text = Loc.T("settings.group.mini");
+        _cbMiniEnable.Text = Loc.T("settings.miniEnable");
+        _cbMiniEveryScreen.Text = Loc.T("settings.miniEveryScreen");
+        _cbMiniAlwaysOnTop.Text = Loc.T("settings.miniAlwaysOnTop");
+        _lblMiniHint.Text = Loc.T("settings.miniHint");
         UpdateCurrentMode();
 
         _lblCycleHint.Text = Loc.T("settings.cycleHint");
@@ -827,6 +887,15 @@ internal sealed class SettingsForm : Form
         _draft.CycleModes = defaults.CycleModes;
         _draft.ShowNotifications = defaults.ShowNotifications;
         _draft.AutoStart = defaults.AutoStart;
+        _draft.MiniSwitcher = defaults.MiniSwitcher;
+        _draft.MiniOnEveryScreen = defaults.MiniOnEveryScreen;
+        _draft.MiniAlwaysOnTop = defaults.MiniAlwaysOnTop;
+        _draft.MiniOpacity = defaults.MiniOpacity;
+
+        // Positions are dropped too: restoring defaults should put the mini switcher back where
+        // it started rather than leave it wherever the user last dragged it.
+        _draft.MiniPositions = new Dictionary<string, MiniPlacement>(StringComparer.Ordinal);
+
         _draft.CycleHotkey = defaults.CycleHotkey;
         _draft.DirectHotkeys = defaults.DirectHotkeys;
 
